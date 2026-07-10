@@ -5,7 +5,7 @@ import io
 import json
 import requests
 from config import ProviderConfig, AppConfig
-from providers import BaseProvider, ExtraField, ModelResponse, TokenBreakdown
+from providers import BaseProvider, ExtraField, ModelResponse, TokenBreakdown, TurnRecord, MultiTurnContext
 
 
 PRICING_CNY = {
@@ -103,7 +103,7 @@ class ArkProvider(BaseProvider):
             f"(约 ${price[0] * CNY_TO_USD:.1f} / ${price[1] * CNY_TO_USD:.1f})"
         )
 
-    def call_model(self, config: ProviderConfig, messages, images=None) -> ModelResponse:
+    def call_model(self, config: ProviderConfig, messages, images=None, previous_response_id=None) -> ModelResponse:
         self.verify_config(config)
 
         payload = {
@@ -114,6 +114,9 @@ class ArkProvider(BaseProvider):
             "max_output_tokens": config.max_tokens,
             "temperature": config.temperature,
         }
+
+        if previous_response_id:
+            payload["previous_response_id"] = previous_response_id
 
         if config.extra.get("thinking", "disabled") == "enabled":
             payload["thinking"] = {"type": "enabled"}
@@ -141,6 +144,47 @@ class ArkProvider(BaseProvider):
 
         data = resp.json()
         return self._parse_response(data, config.model, latency)
+
+    def supports_multi_turn(self) -> bool:
+        return True
+
+    def multi_turn_call(
+        self, config: ProviderConfig, context: MultiTurnContext, user_message: str
+    ) -> MultiTurnContext:
+        self.verify_config(config)
+
+        messages = []
+        is_first = len(context.turns) == 0
+        if is_first and context.system_prompt.strip():
+            messages.append({"role": "system", "content": context.system_prompt.strip()})
+        messages.append({"role": "user", "content": user_message})
+
+        prev_id = context.extra.get("previous_response_id")
+        response = self.call_model(config, messages, previous_response_id=prev_id)
+
+        new_extra = dict(context.extra)
+        new_id = response.raw_response.get("id")
+        if new_id:
+            new_extra["previous_response_id"] = new_id
+
+        in_detail = response.raw_response.get("usage", {}).get("input_tokens_details") or {}
+        cached = in_detail.get("cached_tokens", 0) or 0
+
+        turn = TurnRecord(
+            round_num=len(context.turns) + 1,
+            user_message=user_message,
+            assistant_text=response.text,
+            input_tokens=response.total_input_tokens,
+            cached_tokens=cached,
+            output_tokens=response.total_output_tokens,
+            cost=response.cost,
+            latency_ms=response.latency_ms,
+        )
+        return MultiTurnContext(
+            system_prompt=context.system_prompt,
+            turns=context.turns + [turn],
+            extra=new_extra,
+        )
 
     def _build_input(self, messages, images, image_detail="high"):
         input_list = []

@@ -47,11 +47,49 @@ class ExtraField:
     false_value: Any = False
 
 
+@dataclass
+class TurnRecord:
+    """单轮对话记录"""
+    round_num: int
+    user_message: str
+    assistant_text: str
+    input_tokens: int
+    cached_tokens: int
+    output_tokens: int
+    cost: float
+    latency_ms: float
+
+    @property
+    def uncached_tokens(self) -> int:
+        return self.input_tokens - self.cached_tokens
+
+
+@dataclass
+class MultiTurnContext:
+    """多轮对话上下文，extra 存储供应商私有状态（如 previous_response_id）"""
+    system_prompt: str = ""
+    turns: list[TurnRecord] = field(default_factory=list)
+    extra: dict = field(default_factory=dict)
+
+
 class BaseProvider(ABC):
     name: str = "Base"
     icon: str = "🔌"
     description: str = ""
     supports_images: bool = True
+
+    def supports_multi_turn(self) -> bool:
+        """Whether this provider supports multi-turn conversation management."""
+        return False
+
+    def multi_turn_call(
+        self, config: ProviderConfig, context: MultiTurnContext, user_message: str
+    ) -> MultiTurnContext:
+        """Process one turn of a multi-turn conversation.
+        Provider manages context internally via context.extra.
+        Returns a new MultiTurnContext with the turn appended.
+        """
+        raise NotImplementedError(f"{self.name} does not support multi-turn conversation")
 
     @abstractmethod
     def get_default_config(self) -> ProviderConfig:

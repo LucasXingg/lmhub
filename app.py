@@ -34,6 +34,11 @@ demo_page = st.Page(
     "pages/demo.py", title="Demo", icon="🧪", default=True
 )
 
+multi_turn_page = st.Page(
+    "pages/multi_turn.py", title="Multi-Turn", icon="🔄"
+)
+
+
 provider_pages = []
 for name, provider in providers.items():
     clean_url = "config_" + name.lower().replace(" ", "_").replace(":", "")
@@ -50,7 +55,7 @@ for name, provider in providers.items():
     provider_pages.append(page)
 
 nav = {
-    "🧪 Demo": [demo_page],
+    "🧪 Demo": [demo_page, multi_turn_page],
     "⚙️ Providers": provider_pages,
 }
 
