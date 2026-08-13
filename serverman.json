@@ -1,11 +1,7 @@
 {
   "runtime": "process",
   "name": "LMHub",
-  "install": [
-    "python3 -m venv .venv",
-    ".venv/bin/pip install --upgrade pip",
-    ".venv/bin/pip install -r requirements.txt"
-  ],
+  "install": ["bash install.sh"],
   "build": [],
   "start": "bash start.sh",
   "workdir": ".",
