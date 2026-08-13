@@ -1,0 +1,16 @@
+{
+  "runtime": "process",
+  "name": "LMHub",
+  "install": [
+    "python3 -m venv .venv",
+    ".venv/bin/pip install --upgrade pip",
+    ".venv/bin/pip install -r requirements.txt"
+  ],
+  "build": [],
+  "start": "bash start.sh",
+  "workdir": ".",
+  "env": {
+    "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false"
+  },
+  "healthPath": "/_stcore/health"
+}
