@@ -111,21 +111,58 @@ if vp.available_backend() is None:
 st.divider()
 st.subheader("1️⃣ 上传视频")
 
-uploaded_video = st.file_uploader(
-    "上传视频片段",
-    type=vp.VIDEO_EXTENSIONS,
-    key="video_upload",
-    help="支持 mp4 / mov / mkv / webm 等常见格式，默认单文件上限 200MB",
+try:
+    max_upload_mb = int(st.get_option("server.maxUploadSize"))
+except Exception:
+    max_upload_mb = 200
+
+source_mode = st.radio(
+    "视频来源",
+    ["上传文件", "本地路径"],
+    key="video_source_mode",
+    horizontal=True,
+    help=(
+        f"浏览器上传上限 {max_upload_mb} MB（超限会报 Axios 413）。"
+        "更大的文件请改用本机路径，解码器直接读磁盘，不经过 HTTP。"
+    ),
 )
 
-if not uploaded_video:
-    st.info("请先上传一个视频片段")
-    st.stop()
+if source_mode == "上传文件":
+    uploaded_video = st.file_uploader(
+        "上传视频片段",
+        type=vp.VIDEO_EXTENSIONS,
+        key="video_upload",
+        help=(
+            f"支持 mp4 / mov / mkv / webm 等常见格式，"
+            f"单文件上限 {max_upload_mb} MB。"
+            "若出现 Axios 413，请改用「本地路径」或提高 "
+            "STREAMLIT_SERVER_MAX_UPLOAD_SIZE。"
+        ),
+    )
+    if not uploaded_video:
+        st.info(f"请先上传一个视频片段（上限 {max_upload_mb} MB）")
+        st.stop()
+    video_path = persist_upload(uploaded_video.getvalue(), uploaded_video.name)
+    source_name = uploaded_video.name
+else:
+    local_path = st.text_input(
+        "本机视频路径",
+        key="video_local_path",
+        placeholder="/data/clips/example.mp4",
+        help="填写运行 Streamlit 的机器上的绝对路径，适合超过上传上限的大文件",
+    )
+    if not local_path.strip():
+        st.info("请输入本机上的视频文件路径，或切换回「上传文件」")
+        st.stop()
+    video_path = local_path.strip()
+    path_obj = Path(video_path)
+    if not path_obj.is_file():
+        st.error(f"文件不存在: {video_path}")
+        st.stop()
+    source_name = str(path_obj.resolve())
 
-video_path = persist_upload(uploaded_video.getvalue(), uploaded_video.name)
-
-if st.session_state.get("video_source_name") != uploaded_video.name:
-    st.session_state["video_source_name"] = uploaded_video.name
+if st.session_state.get("video_source_name") != source_name:
+    st.session_state["video_source_name"] = source_name
     # 时间区间与新视频的时长绑定，换片时必须复位，否则会超出 number_input 上限
     st.session_state.pop("video_start", None)
     st.session_state.pop("video_end", None)
@@ -139,7 +176,7 @@ except vp.VideoBackendError as e:
 
 col_video, col_meta = st.columns([2, 1])
 with col_video:
-    st.video(uploaded_video)
+    st.video(video_path)
 with col_meta:
     st.metric("⏱️ 时长", f"{info.duration:.2f} s" if info.duration else "未知")
     st.metric("🎞️ 帧率", f"{info.fps:.2f} fps" if info.fps else "未知")

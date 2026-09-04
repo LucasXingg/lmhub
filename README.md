@@ -48,7 +48,7 @@ pip install -r requirements.txt
 ### 视频抽帧评测
 
 1. 切换到 **🎬 Video** 页面，选择供应商与配置方案
-2. 上传视频片段（mp4 / mov / mkv / webm 等）
+2. 上传视频片段（mp4 / mov / mkv / webm 等），或填写本机路径。浏览器上传默认上限 1024 MB（可用 `STREAMLIT_SERVER_MAX_UPLOAD_SIZE` 调整）；超限会报 Axios 413，请改用本地路径
 3. 选择抽帧策略并设置时间区间，点击 **提取帧**
 4. 在帧预览网格中勾选要发送的帧（可在侧栏开启缩放以节省 token）
 5. 填写提示词后点击 **发送**，查看回复与 Token 用量

@@ -6,7 +6,9 @@
   "start": "bash start.sh",
   "workdir": ".",
   "env": {
-    "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false"
+    "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+    "STREAMLIT_SERVER_MAX_UPLOAD_SIZE": "1024",
+    "STREAMLIT_SERVER_MAX_MESSAGE_SIZE": "1024"
   },
   "healthPath": "/_stcore/health"
 }

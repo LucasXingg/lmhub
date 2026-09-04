@@ -1,0 +1,8 @@
+[server]
+# 单位 MB。视频上传走 /_stcore/upload_file，超过此值前端会报 Axios 413。
+# 也可通过环境变量 STREAMLIT_SERVER_MAX_UPLOAD_SIZE 覆盖。
+maxUploadSize = 1024
+maxMessageSize = 1024
+
+[browser]
+gatherUsageStats = false

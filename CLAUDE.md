@@ -9,6 +9,9 @@ Streamlit 多供应商 LLM 测试工具。支持同时在侧栏配置多个 AI �
 streamlit run app.py  # 等效
 ```
 
+视频上传上限由 `.streamlit/config.toml` 的 `server.maxUploadSize`（默认 1024 MB）控制，
+也可设环境变量 `STREAMLIT_SERVER_MAX_UPLOAD_SIZE`。超过此值前端会报 Axios 413。
+
 ## 架构
 
 ```
