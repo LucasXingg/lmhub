@@ -9,8 +9,10 @@ Streamlit 多供应商 LLM 测试工具。支持同时在侧栏配置多个 AI �
 streamlit run app.py  # 等效
 ```
 
-视频上传上限由 `.streamlit/config.toml` 的 `server.maxUploadSize`（默认 1024 MB）控制，
-也可设环境变量 `STREAMLIT_SERVER_MAX_UPLOAD_SIZE`。超过此值前端会报 Axios 413。
+视频页不用 `st.file_uploader`：反向代理（nginx 默认 `client_max_body_size=1m`）会把
+`/_stcore/upload_file` 的 PUT 直接打成 Axios 413，1MB 出头的片子就会中招。
+`video_upload.py` 用自定义组件把文件按 256KB 经 WebSocket 分片传到 Python。
+超大文件也可填本机路径，解码器直接读磁盘。
 
 ## 架构
 
@@ -24,6 +26,7 @@ pages/multi_turn.py     # 多轮对话页：上下文由供应商内部维护
 pages/video_eval.py     # 视频抽帧评测页：上传视频 → 抽帧 → 连同提示词发送
 image_processor.py      # 图片预处理工具（缩放/裁剪/填充）
 video_processor.py      # 视频抽帧工具（策略计算 + av/cv2 双解码后端）
+video_upload.py         # 浏览器视频分片上传（WebSocket，避开 HTTP 413）
 prompt_templates.py     # 提示词模板持久化与选择/管理组件（各页共用）
 usage_view.py           # Token 用量 / 费用汇总展示组件（各页共用）
 ```

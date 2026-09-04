@@ -13,6 +13,7 @@ from image_processor import (
 from prompt_templates import render_template_bar
 from providers import discover_providers
 from usage_view import render_usage
+from video_upload import render_chunked_video_upload
 import video_processor as vp
 
 FRAME_KEY_PREFIX = "video_frame_sel_"
@@ -111,39 +112,30 @@ if vp.available_backend() is None:
 st.divider()
 st.subheader("1️⃣ 上传视频")
 
-try:
-    max_upload_mb = int(st.get_option("server.maxUploadSize"))
-except Exception:
-    max_upload_mb = 200
-
 source_mode = st.radio(
     "视频来源",
     ["上传文件", "本地路径"],
     key="video_source_mode",
     horizontal=True,
     help=(
-        f"浏览器上传上限 {max_upload_mb} MB（超限会报 Axios 413）。"
-        "更大的文件请改用本机路径，解码器直接读磁盘，不经过 HTTP。"
+        "浏览器选文件后按 256KB 经 WebSocket 分片传输，"
+        "不走 st.file_uploader /_stcore/upload_file，"
+        "可避开反向代理默认 1MB 导致的 Axios 413。"
+        "超大文件也可改用本机路径，解码器直接读磁盘。"
     ),
 )
 
 if source_mode == "上传文件":
-    uploaded_video = st.file_uploader(
-        "上传视频片段",
-        type=vp.VIDEO_EXTENSIONS,
-        key="video_upload",
-        help=(
-            f"支持 mp4 / mov / mkv / webm 等常见格式，"
-            f"单文件上限 {max_upload_mb} MB。"
-            "若出现 Axios 413，请改用「本地路径」或提高 "
-            "STREAMLIT_SERVER_MAX_UPLOAD_SIZE。"
-        ),
-    )
-    if not uploaded_video:
-        st.info(f"请先上传一个视频片段（上限 {max_upload_mb} MB）")
+    uploaded = render_chunked_video_upload("video_bytes")
+    if not uploaded:
+        st.info(
+            "请选择一个视频片段（mp4 / mov / mkv / webm 等）。"
+            "若之前用文件选择器出现 Axios 413，刷新后应已消失："
+            "那是反向代理把超过 1MB 的 HTTP 上传拦下了，与 Streamlit 200MB 上限无关。"
+        )
         st.stop()
-    video_path = persist_upload(uploaded_video.getvalue(), uploaded_video.name)
-    source_name = uploaded_video.name
+    video_path = persist_upload(uploaded.data, uploaded.name)
+    source_name = uploaded.name
 else:
     local_path = st.text_input(
         "本机视频路径",
