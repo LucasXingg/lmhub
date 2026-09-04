@@ -1,29 +1,8 @@
 import streamlit as st
-import json
-from pathlib import Path
 from config import AppConfig
+from prompt_templates import load_templates, save_templates
 from providers import discover_providers, MultiTurnContext
 from image_processor import render_settings
-
-TEMPLATES_PATH = Path("configs/prompt_templates.json")
-
-
-def load_templates():
-    if TEMPLATES_PATH.exists():
-        try:
-            data = json.loads(TEMPLATES_PATH.read_text(encoding="utf-8"))
-            return data.get("templates", [])
-        except (json.JSONDecodeError, KeyError):
-            return []
-    return []
-
-
-def save_templates(templates):
-    TEMPLATES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    TEMPLATES_PATH.write_text(
-        json.dumps({"templates": templates}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
 
 
 def _apply_template():
