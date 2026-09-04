@@ -10,6 +10,7 @@ from image_processor import (
     process_image,
     render_settings,
 )
+from prompt_input import MODE_SCRIPT, render_prompt_input, resolve_prompt
 from prompt_templates import render_template_bar
 from providers import discover_providers
 from usage_view import render_usage
@@ -383,31 +384,35 @@ else:
 st.divider()
 st.subheader("4️⃣ 提示词")
 
-if "video_system" not in st.session_state:
-    st.session_state["video_system"] = "你是一个专业的视频内容分析助手。"
-if "video_user" not in st.session_state:
-    st.session_state["video_user"] = (
-        "以下是从同一段视频中按时间顺序抽取的若干帧，请描述视频中发生了什么。"
-    )
-
-render_template_bar("video", "video_system", "video_user")
-
-system_prompt = st.text_area(
-    "系统提示词 (System Prompt)",
-    height=100,
-    key="video_system",
+render_template_bar(
+    "video",
+    "video_system",
+    "video_user",
+    "video_system_mode",
+    "video_user_mode",
 )
-user_message = st.text_area(
-    "用户消息",
+
+system_raw, system_mode = render_prompt_input(
+    "系统提示词 (System Prompt)",
+    "video_system",
+    "video_system_mode",
     height=100,
-    key="video_user",
+    default_text="你是一个专业的视频内容分析助手。",
+)
+user_raw, user_mode = render_prompt_input(
+    "用户消息",
+    "video_user",
+    "video_user_mode",
+    height=100,
+    default_text="以下是从同一段视频中按时间顺序抽取的若干帧，请描述视频中发生了什么。",
 )
 
 include_timeline = st.checkbox(
     "在用户消息中附加帧时间戳说明",
     value=True,
     key="video_include_timeline",
-    help="把每一帧对应的时间点写进提示词，便于模型理解帧之间的先后顺序",
+    help="仅纯文本模式生效。脚本模式请通过 context['frames'] 自行拼接。",
+    disabled=(user_mode == MODE_SCRIPT),
 )
 
 col_send, col_clear_result, _ = st.columns([1, 1, 6])
@@ -422,12 +427,31 @@ if send_btn:
     if not selected_frames:
         st.warning("请至少选择一帧")
         st.stop()
+
+    prompt_context = {
+        "frame_count": len(selected_frames),
+        "frames": [
+            {"index": f.index, "timestamp": f.timestamp, "label": f.label}
+            for f in selected_frames
+        ],
+        "duration": info.duration,
+        "width": info.width,
+        "height": info.height,
+    }
+    system_prompt = resolve_prompt(
+        system_raw, system_mode, prompt_context, label="系统提示词"
+    )
+    user_message = resolve_prompt(
+        user_raw, user_mode, prompt_context, label="用户消息"
+    )
+    if system_prompt is None or user_message is None:
+        st.stop()
     if not user_message.strip():
         st.warning("请输入消息内容")
         st.stop()
 
     content = user_message.strip()
-    if include_timeline:
+    if include_timeline and user_mode != MODE_SCRIPT:
         timeline = ", ".join(f"#{f.index} {f.label}" for f in selected_frames)
         content = (
             f"以下 {len(selected_frames)} 张图片是同一段视频按时间顺序抽取的帧"

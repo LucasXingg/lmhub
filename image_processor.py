@@ -95,7 +95,7 @@ def render_settings():
     st.divider()
     st.subheader("🖼️ 图像预处理")
 
-    enabled = st.checkbox("启用预处理", value=True, key="img_proc_enable")
+    enabled = st.checkbox("启用预处理", value=False, key="img_proc_enable")
     method = st.selectbox("处理方法", ALL_METHODS, key="img_proc_method")
 
     col1, col2 = st.columns(2)

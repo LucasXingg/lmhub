@@ -5,6 +5,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from prompt_input import MODE_LABELS, MODE_STRING, normalize_mode
+
 TEMPLATES_PATH = Path("configs/prompt_templates.json")
 NO_TEMPLATE = "不使用模板"
 
@@ -27,11 +29,53 @@ def save_templates(templates: list[dict]):
     )
 
 
-def render_template_bar(prefix: str, system_key: str, user_key: str | None = None):
+def template_record(
+    name: str,
+    content: str,
+    user_message: str = "",
+    content_mode: str = MODE_STRING,
+    user_mode: str = MODE_STRING,
+) -> dict:
+    return {
+        "name": name,
+        "content": content,
+        "content_mode": normalize_mode(content_mode),
+        "user_message": user_message,
+        "user_mode": normalize_mode(user_mode),
+    }
+
+
+def apply_template(
+    template: dict,
+    system_key: str,
+    user_key: str | None = None,
+    system_mode_key: str | None = None,
+    user_mode_key: str | None = None,
+):
+    st.session_state[system_key] = template.get("content", "")
+    if system_mode_key:
+        st.session_state[system_mode_key] = normalize_mode(
+            template.get("content_mode", MODE_STRING)
+        )
+    if user_key:
+        st.session_state[user_key] = template.get("user_message", "")
+    if user_mode_key:
+        st.session_state[user_mode_key] = normalize_mode(
+            template.get("user_mode", MODE_STRING)
+        )
+
+
+def render_template_bar(
+    prefix: str,
+    system_key: str,
+    user_key: str | None = None,
+    system_mode_key: str | None = None,
+    user_mode_key: str | None = None,
+):
     """渲染模板下拉框 + 应用/管理/保存按钮。
 
-    应用模板时把内容写回 system_key / user_key 对应的 session_state，
-    因此需要在系统提示词、用户消息的输入控件之前调用。
+    应用模板时把正文和「纯文本 / 脚本」选择写回对应 session_state，
+    因此需要在提示词输入控件之前调用。
     """
     templates = load_templates()
     template_names = [NO_TEMPLATE] + [t["name"] for t in templates]
@@ -57,9 +101,9 @@ def render_template_bar(prefix: str, system_key: str, user_key: str | None = Non
         else:
             for t in templates:
                 if t["name"] == selected_name:
-                    st.session_state[system_key] = t.get("content", "")
-                    if user_key:
-                        st.session_state[user_key] = t.get("user_message", "")
+                    apply_template(
+                        t, system_key, user_key, system_mode_key, user_mode_key
+                    )
                     st.rerun()
                     break
 
@@ -75,7 +119,13 @@ def render_template_bar(prefix: str, system_key: str, user_key: str | None = Non
         st.session_state[f"{prefix}_show_save"] = True
 
     if st.session_state.get(f"{prefix}_show_save", False):
-        _render_save(prefix, templates, system_key, user_key)
+        _render_save(
+            prefix, templates, system_key, user_key, system_mode_key, user_mode_key
+        )
+
+
+def _mode_tag(mode) -> str:
+    return MODE_LABELS.get(normalize_mode(mode), "纯文本")
 
 
 def _render_manage(prefix: str, templates: list[dict]):
@@ -89,9 +139,11 @@ def _render_manage(prefix: str, templates: list[dict]):
                 with col_info:
                     content_preview = _preview(t.get("content", ""), 50)
                     user_preview = _preview(t.get("user_message", ""), 40)
+                    sys_mode = _mode_tag(t.get("content_mode"))
+                    usr_mode = _mode_tag(t.get("user_mode"))
                     st.caption(
-                        f"**{t['name']}**  |  系统: {content_preview}"
-                        f"  |  用户: {user_preview}"
+                        f"**{t['name']}**  |  系统[{sys_mode}]: {content_preview}"
+                        f"  |  用户[{usr_mode}]: {user_preview}"
                     )
                 with col_delete:
                     if st.button(
@@ -110,7 +162,12 @@ def _render_manage(prefix: str, templates: list[dict]):
 
 
 def _render_save(
-    prefix: str, templates: list[dict], system_key: str, user_key: str | None
+    prefix: str,
+    templates: list[dict],
+    system_key: str,
+    user_key: str | None,
+    system_mode_key: str | None,
+    user_mode_key: str | None,
 ):
     with st.container(border=True):
         template_name = st.text_input(
@@ -118,12 +175,20 @@ def _render_save(
             placeholder="输入模板名称...",
             key=f"{prefix}_template_name",
         )
+        sys_mode = normalize_mode(
+            st.session_state.get(system_mode_key, MODE_STRING) if system_mode_key else MODE_STRING
+        )
+        usr_mode = normalize_mode(
+            st.session_state.get(user_mode_key, MODE_STRING) if user_mode_key else MODE_STRING
+        )
         st.caption(
-            f"系统提示词: {_preview(st.session_state.get(system_key, ''), 80) or '(空)'}"
+            f"系统提示词[{_mode_tag(sys_mode)}]: "
+            f"{_preview(st.session_state.get(system_key, ''), 80) or '(空)'}"
         )
         if user_key:
             st.caption(
-                f"用户消息: {_preview(st.session_state.get(user_key, ''), 80) or '(空)'}"
+                f"用户消息[{_mode_tag(usr_mode)}]: "
+                f"{_preview(st.session_state.get(user_key, ''), 80) or '(空)'}"
             )
         col_confirm, col_cancel = st.columns([1, 1])
         with col_confirm:
@@ -135,13 +200,15 @@ def _render_save(
                     st.error(f"模板「{name}」已存在，请使用其他名称")
                 else:
                     templates.append(
-                        {
-                            "name": name,
-                            "content": st.session_state.get(system_key, ""),
-                            "user_message": (
+                        template_record(
+                            name=name,
+                            content=st.session_state.get(system_key, ""),
+                            user_message=(
                                 st.session_state.get(user_key, "") if user_key else ""
                             ),
-                        }
+                            content_mode=sys_mode,
+                            user_mode=usr_mode,
+                        )
                     )
                     save_templates(templates)
                     st.session_state[f"{prefix}_show_save"] = False

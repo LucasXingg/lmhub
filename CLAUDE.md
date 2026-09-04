@@ -27,7 +27,8 @@ pages/video_eval.py     # 视频抽帧评测页：上传视频 → 抽帧 → �
 image_processor.py      # 图片预处理工具（缩放/裁剪/填充）
 video_processor.py      # 视频抽帧工具（策略计算 + av/cv2 双解码后端）
 video_upload.py         # 浏览器视频分片上传（WebSocket，避开 HTTP 413）
-prompt_templates.py     # 提示词模板持久化与选择/管理组件（各页共用）
+prompt_input.py         # 提示词输入：纯文本 / Python 脚本，脚本须赋值 prompt
+prompt_templates.py     # 提示词模板持久化与选择/管理组件（各页共用，含输入模式）
 usage_view.py           # Token 用量 / 费用汇总展示组件（各页共用）
 ```
 
@@ -196,6 +197,14 @@ class ModelResponse:
 
 统一做法：将 PIL Image 转为 PNG bytes → base64 编码 → 拼入 API 请求。
 图片只附在最后一条 user 消息中，前面的消息仅保留纯文本。
+
+侧栏图像预处理默认关闭；`img_proc_enable` 为 True 时才缩放/裁剪。
+
+## 动态提示词
+
+所有系统/用户提示词输入框都带「纯文本 / Python 脚本」开关。脚本模式用 `exec` 运行，**必须赋值 `prompt`（str）** 作为发给模型的最终内容，不引入额外依赖。异常直接显示在页面上。只读变量 `context` 由各页注入（如视频帧时间戳、多轮历史）。
+
+模板 JSON 额外保存 `content_mode` / `user_mode`（`string` | `script`），旧模板缺省视为纯文本。
 
 ## 视频抽帧
 

@@ -1,6 +1,7 @@
 import streamlit as st
 from PIL import Image
 from config import AppConfig
+from prompt_input import render_prompt_input, resolve_prompt
 from prompt_templates import render_template_bar
 from providers import discover_providers
 from image_processor import process_image, render_settings, ALL_METHODS
@@ -47,23 +48,27 @@ with st.expander(f"📋 {selected_name} / {selected_profile} 当前配置", expa
     else:
         st.info("自定义供应商")
 
-if "demo_system" not in st.session_state:
-    st.session_state["demo_system"] = "你是一个有帮助的 AI 助手。"
-if "demo_user" not in st.session_state:
-    st.session_state["demo_user"] = "你好，请介绍一下你自己。"
-
-render_template_bar("demo", "demo_system", "demo_user")
-
-system_prompt = st.text_area(
-    "系统提示词 (System Prompt)",
-    height=100,
-    key="demo_system",
+render_template_bar(
+    "demo",
+    "demo_system",
+    "demo_user",
+    "demo_system_mode",
+    "demo_user_mode",
 )
 
-user_message = st.text_area(
-    "用户消息",
+system_raw, system_mode = render_prompt_input(
+    "系统提示词 (System Prompt)",
+    "demo_system",
+    "demo_system_mode",
     height=100,
-    key="demo_user",
+    default_text="你是一个有帮助的 AI 助手。",
+)
+user_raw, user_mode = render_prompt_input(
+    "用户消息",
+    "demo_user",
+    "demo_user_mode",
+    height=100,
+    default_text="你好，请介绍一下你自己。",
 )
 
 if selected.supports_images:
@@ -101,6 +106,16 @@ if uploaded_files:
             st.caption(f"... 还有 {len(uploaded_files) - 6} 张图片")
 
 if send_btn:
+    image_count = len(uploaded_files) if uploaded_files else 0
+    prompt_context = {"image_count": image_count}
+    system_prompt = resolve_prompt(
+        system_raw, system_mode, prompt_context, label="系统提示词"
+    )
+    user_message = resolve_prompt(
+        user_raw, user_mode, prompt_context, label="用户消息"
+    )
+    if system_prompt is None or user_message is None:
+        st.stop()
     if not user_message.strip():
         st.warning("请输入消息内容")
         st.stop()
