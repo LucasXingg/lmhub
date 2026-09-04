@@ -33,6 +33,19 @@ def probe(path: str) -> vp.VideoInfo:
     return vp.probe_video(path)
 
 
+def preprocess(image):
+    """按侧栏「图像预处理」设置缩放帧，与 Demo 页保持一致。"""
+    if not st.session_state.get("img_proc_enable", False):
+        return image.convert("RGB")
+    return process_image(
+        image,
+        st.session_state.get("img_proc_method", ALL_METHODS[0]),
+        st.session_state.get("img_proc_w", 512),
+        st.session_state.get("img_proc_h", 512),
+        st.session_state.get("img_proc_aspect", True),
+    )
+
+
 def clear_frames():
     for key in list(st.session_state.keys()):
         if key.startswith(FRAME_KEY_PREFIX):
@@ -136,7 +149,9 @@ with col_meta:
 st.divider()
 st.subheader("2️⃣ 抽帧设置")
 
+# 某些容器读不出时长，此时放开区间上限交给用户自己指定
 duration = info.duration if info.duration > 0 else 0.0
+range_limit = duration if duration > 0 else 3600.0
 
 strategy = st.radio(
     "抽帧策略",
@@ -154,7 +169,7 @@ with col_start:
     start_time = st.number_input(
         "起始时间 (秒)",
         min_value=0.0,
-        max_value=max(duration, 0.0),
+        max_value=range_limit,
         value=0.0,
         step=0.5,
         key="video_start",
@@ -163,8 +178,8 @@ with col_end:
     end_time = st.number_input(
         "结束时间 (秒)",
         min_value=0.0,
-        max_value=max(duration, 0.0),
-        value=max(duration, 0.0),
+        max_value=range_limit,
+        value=duration if duration > 0 else 10.0,
         step=0.5,
         key="video_end",
     )
@@ -319,21 +334,22 @@ selected_frames = [
 
 proc_enabled = st.session_state.get("img_proc_enable", False)
 if proc_enabled:
-    proc_w = st.session_state.get("img_proc_w", 512)
-    proc_h = st.session_state.get("img_proc_h", 512)
-    per_frame_tokens = estimate_image_tokens(proc_w, proc_h)
     st.caption(
         f"已启用侧栏图像预处理: {st.session_state.get('img_proc_method', ALL_METHODS[0])} "
-        f"→ {proc_w}×{proc_h}"
+        f"→ {st.session_state.get('img_proc_w', 512)}×{st.session_state.get('img_proc_h', 512)}"
     )
 else:
-    per_frame_tokens = estimate_image_tokens(info.width or 512, info.height or 512)
     st.caption("未启用图像预处理，将按原始分辨率发送（可在侧栏开启缩放以节省 token）")
 
-st.caption(
-    f"已选中 **{len(selected_frames)}** 帧，"
-    f"预计图片输入约 **{len(selected_frames) * per_frame_tokens:,}** tokens (OpenAI 估算)"
-)
+if selected_frames:
+    sample_size = preprocess(selected_frames[0].image).size
+    per_frame_tokens = estimate_image_tokens(*sample_size)
+    st.caption(
+        f"已选中 **{len(selected_frames)}** 帧 (发送尺寸 {sample_size[0]}×{sample_size[1]})，"
+        f"预计图片输入约 **{len(selected_frames) * per_frame_tokens:,}** tokens (OpenAI 估算)"
+    )
+else:
+    st.caption("未选中任何帧")
 
 st.divider()
 st.subheader("4️⃣ 提示词")
@@ -394,20 +410,7 @@ if send_btn:
         messages.append({"role": "system", "content": system_prompt.strip()})
     messages.append({"role": "user", "content": content})
 
-    images = []
-    for frame in selected_frames:
-        image = frame.image
-        if proc_enabled:
-            image = process_image(
-                image,
-                st.session_state.get("img_proc_method", ALL_METHODS[0]),
-                st.session_state.get("img_proc_w", 512),
-                st.session_state.get("img_proc_h", 512),
-                st.session_state.get("img_proc_aspect", True),
-            )
-        else:
-            image = image.convert("RGB")
-        images.append(image)
+    images = [preprocess(frame.image) for frame in selected_frames]
 
     with st.spinner(f"正在调用 {selected_name} / {selected_profile} ..."):
         try:

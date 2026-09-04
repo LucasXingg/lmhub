@@ -17,7 +17,12 @@ config.py               # AppConfig / ProviderConfig 数据类（JSON 持久化�
 providers/__init__.py   # BaseProvider 基类 + ExtraField + discover_providers() 自动发现
 providers/*_provider.py # 各供应商实现（启动时自动扫描注册）
 pages/demo.py           # 主测试页：选择供应商 → 输入消息 → 查看结果/用量/费用
+pages/multi_turn.py     # 多轮对话页：上下文由供应商内部维护
+pages/video_eval.py     # 视频抽帧评测页：上传视频 → 抽帧 → 连同提示词发送
 image_processor.py      # 图片预处理工具（缩放/裁剪/填充）
+video_processor.py      # 视频抽帧工具（策略计算 + av/cv2 双解码后端）
+prompt_templates.py     # 提示词模板持久化与选择/管理组件（各页共用）
+usage_view.py           # Token 用量 / 费用汇总展示组件（各页共用）
 ```
 
 - 供应商通过文件名模式 `*_provider.py` 自动发现，无需手动注册。
@@ -185,6 +190,19 @@ class ModelResponse:
 
 统一做法：将 PIL Image 转为 PNG bytes → base64 编码 → 拼入 API 请求。
 图片只附在最后一条 user 消息中，前面的消息仅保留纯文本。
+
+## 视频抽帧
+
+`video_processor.py` 把视频拆成 PIL Image 列表，之后完全复用图片链路（`call_model` 的 `images` 参数），
+因此 **供应商无需为视频做任何适配**，只要 `supports_images = True` 即可用于视频评测。
+
+- 解码后端按 `av` (PyAV) → `cv2` (OpenCV) 顺序自动选择，两者任一可用即可；`available_backend()` 返回当前后端。
+- 抽帧策略只负责算出时间点列表，再统一交给 `extract_frames(path, timestamps)`：
+  - `uniform_timestamps(count, start, end)` — 均匀采样
+  - `interval_timestamps(step, start, end, max_frames)` — 固定间隔
+  - `parse_timestamps(text)` — 自定义时间点，支持 `12.5` / `01:03.5` 写法
+  - `detect_scene_timestamps(...)` — 顺序扫描，保留与上一张保留帧差异超过阈值的时间点
+- `clamp_range(info, start, end)` 会为末尾留出一帧余量，避免读取视频结尾时解码失败。
 
 ## 精简示例
 
