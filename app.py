@@ -38,6 +38,10 @@ multi_turn_page = st.Page(
     "pages/multi_turn.py", title="Multi-Turn", icon="🔄"
 )
 
+video_page = st.Page(
+    "pages/video_eval.py", title="Video", icon="🎬"
+)
+
 
 provider_pages = []
 for name, provider in providers.items():
@@ -55,7 +59,7 @@ for name, provider in providers.items():
     provider_pages.append(page)
 
 nav = {
-    "🧪 Demo": [demo_page, multi_turn_page],
+    "🧪 Demo": [demo_page, multi_turn_page, video_page],
     "⚙️ Providers": provider_pages,
 }
 

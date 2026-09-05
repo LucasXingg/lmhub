@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: "Source Sans Pro", "Segoe UI", sans-serif;
+        font-size: 14px;
+        color: #31333f;
+        background: transparent;
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      input[type="file"] {
+        width: 100%;
+      }
+      .hint {
+        color: #808495;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <input id="file" type="file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v" />
+      <div id="hint" class="hint">文件经 WebSocket 分片传输，不走 /_stcore/upload_file</div>
+    </div>
+    <script>
+      const CHUNK_DEFAULT = 256 * 1024;
+      let file = null;
+      let lastWant = -1;
+      let lastReset = 0;
+      let lastSentKey = "";
+
+      function send(type, payload) {
+        window.parent.postMessage(
+          Object.assign({ isStreamlitMessage: true, type: type }, payload),
+          "*"
+        );
+      }
+
+      function setValue(value) {
+        const key = JSON.stringify({
+          op: value.op,
+          i: value.i,
+          name: value.name,
+          size: value.size,
+        });
+        if (key === lastSentKey && value.op !== "chunk") {
+          return;
+        }
+        lastSentKey = key;
+        send("streamlit:setComponentValue", { value: value, dataType: "json" });
+      }
+
+      function arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        const chunk = 0x8000;
+        let binary = "";
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+      }
+
+      function sendChunk(want, chunkSize) {
+        if (!file || want < 0) {
+          return;
+        }
+        const start = want * chunkSize;
+        if (start >= file.size) {
+          return;
+        }
+        file.slice(start, start + chunkSize).arrayBuffer().then((buf) => {
+          setValue({
+            op: "chunk",
+            i: want,
+            data: arrayBufferToBase64(buf),
+          });
+        });
+      }
+
+      document.getElementById("file").addEventListener("change", (event) => {
+        file = event.target.files[0] || null;
+        lastWant = -1;
+        lastSentKey = "";
+        if (!file) {
+          return;
+        }
+        const chunkSize = CHUNK_DEFAULT;
+        const total = Math.max(1, Math.ceil(file.size / chunkSize));
+        setValue({
+          op: "start",
+          name: file.name,
+          size: file.size,
+          mime: file.type || "application/octet-stream",
+          total: total,
+        });
+      });
+
+      window.addEventListener("message", (event) => {
+        if (!event.data || event.data.type !== "streamlit:render") {
+          return;
+        }
+        const args = event.data.args || {};
+        const reset = args.reset || 0;
+        if (reset !== lastReset) {
+          lastReset = reset;
+          file = null;
+          lastWant = -1;
+          lastSentKey = "";
+          document.getElementById("file").value = "";
+        }
+        const want = Number(args.want_chunk);
+        const chunkSize = Number(args.chunk_size) || CHUNK_DEFAULT;
+        if (file && want >= 0 && want !== lastWant) {
+          lastWant = want;
+          sendChunk(want, chunkSize);
+        }
+      });
+
+      send("streamlit:componentReady", { apiVersion: 1 });
+      send("streamlit:setFrameHeight", { height: 72 });
+    </script>
+  </body>
+</html>

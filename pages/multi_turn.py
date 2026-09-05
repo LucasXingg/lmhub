@@ -1,40 +1,9 @@
 import streamlit as st
-import json
-from pathlib import Path
 from config import AppConfig
+from prompt_input import render_prompt_input, resolve_prompt
+from prompt_templates import render_template_bar
 from providers import discover_providers, MultiTurnContext
 from image_processor import render_settings
-
-TEMPLATES_PATH = Path("configs/prompt_templates.json")
-
-
-def load_templates():
-    if TEMPLATES_PATH.exists():
-        try:
-            data = json.loads(TEMPLATES_PATH.read_text(encoding="utf-8"))
-            return data.get("templates", [])
-        except (json.JSONDecodeError, KeyError):
-            return []
-    return []
-
-
-def save_templates(templates):
-    TEMPLATES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    TEMPLATES_PATH.write_text(
-        json.dumps({"templates": templates}, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-
-def _apply_template():
-    selected = st.session_state.get("mt_template_select", "不使用模板")
-    if selected == "不使用模板":
-        return
-    templates = load_templates()
-    for t in templates:
-        if t["name"] == selected:
-            st.session_state["mt_system"] = t.get("content", "")
-            break
 
 
 def _clear_context():
@@ -99,112 +68,24 @@ if "mt_context" not in st.session_state:
     st.session_state["mt_context"] = MultiTurnContext()
 if "mt_raw_rounds" not in st.session_state:
     st.session_state["mt_raw_rounds"] = set()
-if "mt_system" not in st.session_state:
-    st.session_state["mt_system"] = ""
-
 context = st.session_state["mt_context"]
 
-system_prompt = st.text_area(
-    "系统提示词 (可选，仅首轮生效)",
-    height=68,
-    key="mt_system",
-    value=context.system_prompt,
-    help="系统提示词仅在首轮对话中发送；后续轮次由供应商内部维护上下文",
+render_template_bar(
+    "mt",
+    "mt_system",
+    "mt_user_input",
+    "mt_system_mode",
+    "mt_user_mode",
 )
 
-templates = load_templates()
-template_names = ["不使用模板"] + [t["name"] for t in templates]
-col_t1, col_t2, col_t3, col_t4 = st.columns([7, 1, 1, 1])
-with col_t1:
-    selected_template_name = st.selectbox(
-        "提示词模板",
-        template_names,
-        key="mt_template_select",
-        help="选择已保存的模板，点击右侧按钮应用或管理",
-    )
-with col_t2:
-    apply_btn = st.button("应用模板", key="mt_apply_btn", width="stretch", on_click=_apply_template)
-with col_t3:
-    manage_btn = st.button("管理模板", key="mt_manage_btn", width="stretch")
-with col_t4:
-    save_btn = st.button("💾 保存为模板", key="mt_save_btn", width="stretch")
-
-if apply_btn:
-    if selected_template_name == "不使用模板":
-        st.warning("请先选择一个提示词模板")
-
-if manage_btn:
-    st.session_state["mt_show_manage"] = (
-        not st.session_state.get("mt_show_manage", False)
-    )
-
-if st.session_state.get("mt_show_manage", False):
-    with st.container(border=True):
-        st.caption("模板管理")
-        if not templates:
-            st.info("暂无已保存的模板")
-        else:
-            for idx, t in enumerate(templates):
-                col_m1, col_m2 = st.columns([11, 1])
-                with col_m1:
-                    content_preview = (
-                        t.get("content", "")[:50] + "..."
-                        if len(t.get("content", "")) > 50
-                        else t.get("content", "")
-                    )
-                    st.caption(f"**{t['name']}**  |  系统提示词: {content_preview}")
-                with col_m2:
-                    if st.button(
-                        "🗑️",
-                        key=f"mt_delete_tpl_{idx}",
-                        help=f"删除模板「{t['name']}」",
-                    ):
-                        del templates[idx]
-                        save_templates(templates)
-                        st.rerun()
-        col_mc1, col_mc2 = st.columns([1, 1])
-        with col_mc1:
-            if st.button("关闭", key="mt_close_manage", width="stretch"):
-                st.session_state["mt_show_manage"] = False
-                st.rerun()
-
-if save_btn:
-    st.session_state["mt_show_save"] = True
-
-if st.session_state.get("mt_show_save", False):
-    with st.container(border=True):
-        template_name = st.text_input(
-            "模板名称",
-            placeholder="输入模板名称...",
-            key="mt_template_name",
-        )
-        sys_full = st.session_state.get("mt_system", "")
-        sys_preview = sys_full[:80] + "..." if len(sys_full) > 80 else sys_full
-        st.caption(f"系统提示词: {sys_preview if sys_preview else '(空)'}")
-        col_s1, col_s2 = st.columns([1, 1])
-        with col_s1:
-            if st.button("确认保存", key="mt_confirm_save"):
-                name = template_name.strip()
-                if not name:
-                    st.error("请输入模板名称")
-                elif any(t["name"] == name for t in templates):
-                    st.error(f"模板「{name}」已存在，请使用其他名称")
-                else:
-                    templates.append(
-                        {
-                            "name": name,
-                            "content": st.session_state.get("mt_system", ""),
-                            "user_message": "",
-                        }
-                    )
-                    save_templates(templates)
-                    st.session_state["mt_show_save"] = False
-                    st.success(f"模板「{name}」已保存")
-                    st.rerun()
-        with col_s2:
-            if st.button("取消", key="mt_cancel_save"):
-                st.session_state["mt_show_save"] = False
-                st.rerun()
+system_raw, system_mode = render_prompt_input(
+    "系统提示词 (可选，仅首轮生效)",
+    "mt_system",
+    "mt_system_mode",
+    height=68,
+    default_text=context.system_prompt,
+    help="系统提示词仅在首轮对话中发送；后续轮次由供应商内部维护上下文",
+)
 
 st.divider()
 
@@ -246,22 +127,36 @@ if context.turns:
 else:
     st.info("发送第一条消息开始多轮对话")
 
-with st.form(key="mt_input_form", clear_on_submit=True, border=False):
-    col_input, col_btn = st.columns([8, 1])
-    with col_input:
-        user_message = st.text_area(
-            "输入消息",
-            height=80,
-            key="mt_user_input",
-            placeholder="输入您的消息...",
-            label_visibility="collapsed",
-        )
-    with col_btn:
-        send_btn = st.form_submit_button("发送", type="primary", width="stretch")
+user_raw, user_mode = render_prompt_input(
+    "输入消息",
+    "mt_user_input",
+    "mt_user_mode",
+    height=80,
+    placeholder="输入您的消息...",
+)
 
-clear_btn = st.button("清空", key="mt_clear", width="stretch", on_click=_clear_context)
+col_send, col_clear = st.columns([1, 1])
+with col_send:
+    send_btn = st.button("发送", type="primary", width="stretch", key="mt_send")
+with col_clear:
+    clear_btn = st.button("清空", key="mt_clear", width="stretch", on_click=_clear_context)
 
 if send_btn:
+    prompt_context = {
+        "round": len(context.turns) + 1,
+        "history": [
+            {"user": t.user_message, "assistant": t.assistant_text}
+            for t in context.turns
+        ],
+    }
+    system_prompt = resolve_prompt(
+        system_raw, system_mode, prompt_context, label="系统提示词"
+    )
+    user_message = resolve_prompt(
+        user_raw, user_mode, prompt_context, label="用户消息"
+    )
+    if system_prompt is None or user_message is None:
+        st.stop()
     msg = user_message.strip()
     if not msg:
         st.warning("请输入消息内容")

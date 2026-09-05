@@ -3,3 +3,7 @@ openai>=1.0.0
 anthropic>=0.30.0
 Pillow>=10.0.0
 requests>=2.27.0
+numpy>=1.24.0
+pyarrow>=14.0.0
+# 视频抽帧解码后端；也可改装 av (PyAV)，video_processor 会自动选择
+opencv-python-headless>=4.9.0
